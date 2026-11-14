@@ -17,7 +17,7 @@ Write-Host "`n========================================================" -Foregro
 Write-Host "   Call of Duty / Warzone Competitive Config Optimizer   " -ForegroundColor Cyan
 Write-Host "========================================================`n" -ForegroundColor Magenta
 
-# Locate potential CoD configuration paths (Documents and LocalAppData)
+# Locate potential CoD configuration paths
 $paths = @(
     "$env:USERPROFILE\Documents\Call of Duty\players",
     "$env:LOCALAPPDATA\Activision\Call of Duty\players"
@@ -25,33 +25,59 @@ $paths = @(
 
 if (-not $paths -or $paths.Count -eq 0) {
     $fallback = "$env:USERPROFILE\Documents\Call of Duty\players"
-    New-Item -ItemType Directory -Path $fallback -Force | Out-Null
+    if (-not (Test-Path $fallback)) {
+        New-Item -ItemType Directory -Path $fallback -Force | Out-Null
+    }
     $paths = @($fallback)
+}
+
+# Helper function to find all target config files (including Activision account ID subfolders)
+function Get-CoDConfigFiles {
+    param([string]$basePath)
+    Get-ChildItem -Path $basePath -Recurse -File -ErrorAction SilentlyContinue | Where-Object {
+        $_.Extension -in '.cst', '.txt' -and
+        $_.DirectoryName -notmatch '_backup_' -and
+        ($_.Name -match '^(options|s\.|cs\.|gamerprofile|.*cod)' -or $_.Name -match '\.cst$')
+    }
 }
 
 # 1. Unlock Mode
 if ($UnlockOnly) {
     Write-Host "[*] Unlocking configuration files (removing Read-Only)..." -ForegroundColor Yellow
+    $foundAny = $false
     foreach ($p in $paths) {
-        Get-ChildItem -Path $p -Include "*.cst","*.txt" -Recurse | ForEach-Object {
-            Set-ItemProperty -Path $_.FullName -Name IsReadOnly -Value $false
-            Write-Host "  [UNLOCKED] $($_.Name)" -ForegroundColor Gray
+        $files = Get-CoDConfigFiles -basePath $p
+        foreach ($f in $files) {
+            Set-ItemProperty -Path $f.FullName -Name IsReadOnly -Value $false
+            Write-Host "  [UNLOCKED] $($f.FullName.Replace($p, ''))" -ForegroundColor Gray
+            $foundAny = $true
         }
     }
-    Write-Host "`n[OK] All config files are unlocked! You can now adjust in-game settings." -ForegroundColor Green
+    if (-not $foundAny) {
+        Write-Host "  [!] No .cst or .txt files found to unlock." -ForegroundColor Yellow
+    } else {
+        Write-Host "`n[OK] All config files are unlocked! You can now adjust in-game settings." -ForegroundColor Green
+    }
     return
 }
 
 # 2. Lock Mode
 if ($LockOnly) {
     Write-Host "[*] Locking configuration files to Read-Only..." -ForegroundColor Yellow
+    $foundAny = $false
     foreach ($p in $paths) {
-        Get-ChildItem -Path $p -Include "*.cst","*.txt" -Recurse | ForEach-Object {
-            Set-ItemProperty -Path $_.FullName -Name IsReadOnly -Value $true
-            Write-Host "  [LOCKED] $($_.Name)" -ForegroundColor Gray
+        $files = Get-CoDConfigFiles -basePath $p
+        foreach ($f in $files) {
+            Set-ItemProperty -Path $f.FullName -Name IsReadOnly -Value $true
+            Write-Host "  [LOCKED] $($f.FullName.Replace($p, ''))" -ForegroundColor Gray
+            $foundAny = $true
         }
     }
-    Write-Host "`n[OK] All config files are locked to Read-Only! Settings are protected." -ForegroundColor Green
+    if (-not $foundAny) {
+        Write-Host "  [!] No .cst or .txt files found to lock." -ForegroundColor Yellow
+    } else {
+        Write-Host "`n[OK] All config files are locked to Read-Only! Settings are protected." -ForegroundColor Green
+    }
     return
 }
 
@@ -95,22 +121,21 @@ $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 
 foreach ($p in $paths) {
     Write-Host "`n[*] Scanning directory: $p" -ForegroundColor Cyan
-    $files = Get-ChildItem -Path $p -Include "options.*.cst","s.*.txt","*.cod*.cst","*.cod*.txt" -File
+    $files = Get-CoDConfigFiles -basePath $p
     
     if (-not $files -or $files.Count -eq 0) {
         Write-Host "  No active .cst or .txt config files found in this path." -ForegroundColor DarkGray
         continue
     }
 
-    $backupDir = Join-Path $p "_backup_$timestamp"
-    New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
-    Write-Host "  Created backup directory: _backup_$timestamp" -ForegroundColor DarkCyan
-
     foreach ($file in $files) {
-        # Backup original
+        $relPath = $file.FullName.Replace($p, '')
+        $backupDir = Join-Path $file.DirectoryName "_backup_$timestamp"
+        if (-not (Test-Path $backupDir)) {
+            New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
+        }
         Copy-Item -Path $file.FullName -Destination $backupDir -Force
         
-        # Strip Read-Only to modify
         Set-ItemProperty -Path $file.FullName -Name IsReadOnly -Value $false
 
         $content = [System.IO.File]::ReadAllText($file.FullName, [System.Text.Encoding]::UTF8)
@@ -134,14 +159,13 @@ foreach ($p in $paths) {
 
         if ($modified) {
             [System.IO.File]::WriteAllText($file.FullName, $content, [System.Text.Encoding]::UTF8)
-            Write-Host "  [OPTIMIZED] $($file.Name)" -ForegroundColor Green
+            Write-Host "  [OPTIMIZED] $relPath" -ForegroundColor Green
         } else {
-            Write-Host "  [VERIFIED]  $($file.Name)" -ForegroundColor Gray
+            Write-Host "  [VERIFIED]  $relPath" -ForegroundColor Gray
         }
 
-        # Apply Read-Only attribute to prevent Call of Duty from overwriting configs
         Set-ItemProperty -Path $file.FullName -Name IsReadOnly -Value $true
-        Write-Host "  [LOCKED]    $($file.Name) (Read-Only)" -ForegroundColor DarkGreen
+        Write-Host "  [LOCKED]    $relPath (Read-Only)" -ForegroundColor DarkGreen
     }
 }
 
