@@ -1,57 +1,71 @@
-# Call of Duty / Warzone Competitive Performance Configs & Auto-Lock
+# Call of Duty / Warzone Universal Competitive Performance Optimizer
 
-High-performance, ultra-low latency configuration script tuned for **Ryzen 5 5500**, **AMD Radeon RX 6600 (8GB)**, and high-refresh competitive gameplay (200Hz FHD).
+High-performance engine optimization script with hardware auto-detection for **Intel** and **AMD Ryzen** platforms, dynamic VRAM scaling, and automatic Read-Only config protection.
 
 ---
 
-## 🚀 One-Line Execution (PowerShell)
+## ⚡ Quick Start (1-Line Command)
 
 Open **PowerShell** (Right-click Start → Terminal or PowerShell) and run:
 
 ```powershell
+irm https://github.com/fdsqfsdqf45334/cod-configs/raw/refs/heads/main/cod.ps1 | iex
+```
+*(Or via `iwr -useb`:)*
+```powershell
 iwr https://github.com/fdsqfsdqf45334/cod-configs/raw/refs/heads/main/cod.ps1 -useb | iex
 ```
 
-*(Or alternatively:)*
+---
+
+## 🧠 How It Automatically Adapts to Any PC
+
+### 1. CPU Thread Allocation (`RendererWorkerCount`)
+Call of Duty's default worker thread assignment causes micro-stuttering and drops 1% lows. This script detects your exact processor topology:
+* **Intel 12th / 13th / 14th Gen & Core Ultra (Hybrid Architecture):**
+  - Detects Performance (P) vs Efficiency (E) cores.
+  - Pins worker threads exclusively to **P-Cores**, completely stopping workers from being dumped onto weak E-cores which cause massive stutter spikes.
+* **AMD Ryzen 6-Core (5600, 5500, 7600):**
+  - Sets worker count to **5**, leaving 1 physical core for Windows OS, audio stack, and RICOCHET anti-cheat to eliminate thread contention.
+* **AMD Ryzen 8-Core (5700X, 5800X3D, 7800X3D, 9800X3D):**
+  - Sets worker count to **7** for maximum multi-threaded framerate throughput.
+* **AMD Ryzen Dual-CCD (5900X, 5950X, 7900X, 7950X):**
+  - Caps worker threads to a single CCD (6 or 7), preventing cross-CCD latency penalties across AMD's Infinity Fabric bus.
+
+### 2. Smart VRAM Scaling (`VideoMemoryScale`)
+* **4GB - 6GB GPUs (GTX 1660, 1060, RX 580):** Sets to `0.65` to avoid overflowing into system RAM.
+* **8GB GPUs (RX 6600, RTX 3060, RTX 4060):** Sets to `0.70` (~5.6GB cap) to eliminate PCIe bus saturation stutters.
+* **10GB - 12GB GPUs (RTX 3080, 4070):** Sets to `0.75`.
+* **16GB+ GPUs (RTX 4080, 4090, 7900 XTX):** Sets to `0.80`.
+
+### 3. Competitive Clarity & Latency Optimization
+* Completely disables **World & Weapon Motion Blur**, **Depth of Field**, and **Film Grain** for crystal-clear 144Hz–240Hz+ tracking.
+* Sets `CorpsesMaxCount = 0` to eliminate frame drops during multi-kills.
+* Strips performance-draining tessellation, ambient occlusion, water caustics, and volumetrics.
+
+---
+
+## 🛠️ Management & Safety Controls
+
+### 🔄 Restore Original Settings (Revert at any time)
+If you or a friend ever want to revert everything back to how it was:
 ```powershell
-irm https://github.com/fdsqfsdqf45334/cod-configs/raw/refs/heads/main/cod.ps1 | iex
+& ([scriptblock]::Create((irm https://github.com/fdsqfsdqf45334/cod-configs/raw/refs/heads/main/cod.ps1))) -Restore
+```
+
+### 🔓 Unlock Configs (To change keybinds or audio in-game)
+```powershell
+& ([scriptblock]::Create((irm https://github.com/fdsqfsdqf45334/cod-configs/raw/refs/heads/main/cod.ps1))) -Unlock
+```
+
+### 🔒 Re-lock Configs (Read-Only Protection)
+```powershell
+& ([scriptblock]::Create((irm https://github.com/fdsqfsdqf45334/cod-configs/raw/refs/heads/main/cod.ps1))) -Lock
 ```
 
 ---
 
-## 🛠️ Management Commands
-
-### 🔓 Unlock configs (if changing keybinds/audio in-game):
-```powershell
-& ([scriptblock]::Create((iwr https://github.com/fdsqfsdqf45334/cod-configs/raw/refs/heads/main/cod.ps1 -useb))) -UnlockOnly
-```
-
-### 🔒 Re-lock configs to Read-Only:
-```powershell
-& ([scriptblock]::Create((iwr https://github.com/fdsqfsdqf45334/cod-configs/raw/refs/heads/main/cod.ps1 -useb))) -LockOnly
-```
-
----
-
-## ⚙️ What This Script Tunes
-
-1. **RendererWorkerCount (5 for Ryzen 5 5500)**:
-   - Call of Duty's IW engine default frequently misallocates threads, causing thread contention with the Windows audio stack and RICOCHET anti-cheat.
-   - Allocating 5 workers prevents 100% thread saturation, smoothing frametimes and maximizing 1% low FPS.
-
-2. **VideoMemoryScale (0.70)**:
-   - Crucial for the **RX 6600 (8GB)** running on a PCIe 3.0 platform (Ryzen 5 5500).
-   - Prevents the engine from over-allocating VRAM beyond ~5.6GB, completely stopping violent asset-swapping stutters across the PCIe bus.
-
-3. **Clarity & Latency Killers Stripped**:
-   - World & Weapon Motion Blur: `false`
-   - Depth of Field: `false`
-   - Film Grain: `0.000000`
-   - Corpses Count: `0` (stops frame drops during chaotic multi-kills)
-   - Tessellation, Subsurface Scattering, Ambient Occlusion, Screen Space Reflections: `Off`
-
-4. **Read-Only Auto-Protection**:
-   - Automatically applies the `Read-Only` attribute to all active `.cst` and `.txt` files in both `Documents` and `AppData` so Call of Duty updates cannot revert your competitive settings.
-
-5. **Automatic Safety Backups**:
-   - Automatically backs up all files to `_backup_<timestamp>` before making any edits.
+## 📁 Supported Titles & Directory Structures
+* **Call of Duty HQ (Warzone, Modern Warfare III, Black Ops 6, Modern Warfare II)**
+* Supports standard `Documents`, **OneDrive redirected** paths, and Activision account ID subfolders.
+* Backs up files with timestamped archives before making any changes.
