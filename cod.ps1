@@ -2,6 +2,8 @@
 ==================================================================================
    Call of Duty / Warzone Universal Competitive Performance & Config Optimizer    
    Multi-System Engine Tuning: Intel (Hybrid/P-Cores) & AMD Ryzen (CCD-Aware)     
+   Multi-Title: MWII (.cod22), MWIII (.cod23), BO6/BO7 (.cod24/.cod25/.cod26)     
+   Supports: .cst, .txt, .txt0, .txt1 (Dual-Slot Sync) & .ini Files               
    Dynamic VRAM Scaler | Read-Only Auto-Lock | Instant Restore Engine             
 ==================================================================================
 #>
@@ -50,13 +52,13 @@ if (-not $searchPaths -or $searchPaths.Count -eq 0) {
     return
 }
 
-# Helper function to get all editable config files
+# Helper function to get all editable config files (including BO6 dual slots .txt0 / .txt1)
 function Get-CoDConfigs {
     param([string]$targetDir)
     Get-ChildItem -Path $targetDir -Recurse -File -ErrorAction SilentlyContinue | Where-Object {
         $_.DirectoryName -notmatch '_backup_' -and
-        ($_.Extension -in '.cst', '.txt', '.ini') -and
-        ($_.Name -match '^(options|s\.|cs\.|gamerprofile|adv_options|config)' -or $_.Extension -eq '.cst')
+        ($_.Name -match '\.(cst|txt[0-9]*|ini)$') -and
+        ($_.Name -match '^(options|s\.|cs\.|g\.|gamerprofile|adv_options|config)' -or $_.Name -match '\.cst$')
     }
 }
 
@@ -89,7 +91,7 @@ if ($Restore) {
 }
 
 # -------------------------------------------------------------------
-# 3. Unlock Mode (Allow in-game edits without losing file permissions)
+# 3. Unlock Mode
 # -------------------------------------------------------------------
 if ($Unlock) {
     Write-Host "[*] UNLOCK MODE: Removing Read-Only attribute..." -ForegroundColor Yellow
@@ -107,7 +109,7 @@ if ($Unlock) {
 }
 
 # -------------------------------------------------------------------
-# 4. Lock Mode (Re-lock without re-modifying)
+# 4. Lock Mode
 # -------------------------------------------------------------------
 if ($Lock) {
     Write-Host "[*] LOCK MODE: Applying Read-Only protection..." -ForegroundColor Yellow
@@ -136,7 +138,6 @@ $isIntel = $cpuName -match "Intel"
 $isAmd = $cpuName -match "AMD|Ryzen"
 
 # Intel Hybrid Architecture Detection (P-Cores vs E-Cores)
-# On Intel 12th-14th Gen / Core Ultra, SMT is active only on P-cores. P-Cores = (Threads - Total Cores)
 $pCores = $cores
 $hasHybridArch = $false
 if ($isIntel -and ($threads -gt $cores) -and (($threads - $cores) -lt $cores)) {
@@ -144,18 +145,14 @@ if ($isIntel -and ($threads -gt $cores) -and (($threads - $cores) -lt $cores)) {
     $hasHybridArch = $true
 }
 
-# Worker Thread Formula:
+# Worker Thread Calculation
 if ($Workers -gt 0) {
     $optimalWorkers = $Workers
 } elseif ($hasHybridArch) {
     # Intel Hybrid: strictly stay on P-cores to avoid scheduling threads on weak E-cores
     $optimalWorkers = if ($pCores -gt 4) { $pCores - 1 } else { $pCores }
 } elseif ($isAmd) {
-    # AMD Ryzen:
-    # 4 Cores -> 3
-    # 6 Cores (5600/5500/7600) -> 5 (Prevents 100% thread contention with OS/RICOCHET/audio)
-    # 8 Cores (5700X/5800X3D/7800X3D/9800X3D) -> 7 (Max throughput, 1 core reserved)
-    # 12/16 Cores Dual-CCD (5900X/5950X/7900X/7950X) -> 6 or 7 (Stays inside CCD0 to eliminate cross-CCD latency)
+    # AMD Ryzen: 6-Core -> 5; 8-Core -> 7; 12/16 Dual-CCD -> 6
     if ($cores -eq 4) { $optimalWorkers = 3 }
     elseif ($cores -eq 6) { $optimalWorkers = 5 }
     elseif ($cores -eq 8) { $optimalWorkers = 7 }
@@ -183,15 +180,14 @@ $gpuName = if ($gpu.Name) { $gpu.Name.Trim() } else { "Generic Graphics Adapter"
 if ($VramScale -gt 0.0) {
     $targetVramScale = $VramScale
 } else {
-    # Default scale based on GPU tier
     if ($gpuName -match "4090|4080|7900|3090|XTX") {
         $targetVramScale = 0.80
     } elseif ($gpuName -match "4070|3080|6800|6900|7800|16GB") {
         $targetVramScale = 0.75
     } elseif ($gpuName -match "6600|7600|4060|3060|3050|2060|5700|5600|8GB") {
-        $targetVramScale = 0.70  # Stutter protection for 8GB buffers
+        $targetVramScale = 0.70
     } elseif ($gpuName -match "1660|1060|1650|580|570|6GB|4GB") {
-        $targetVramScale = 0.65  # Heavy protection against Windows RAM paging
+        $targetVramScale = 0.65
     } else {
         $targetVramScale = 0.70
     }
@@ -201,28 +197,40 @@ Write-Host "  GPU Model  : $gpuName" -ForegroundColor White
 Write-Host "  -> Optimal VideoMemoryScale    : $targetVramScale`n" -ForegroundColor Green
 
 # -------------------------------------------------------------------
-# 7. Competitive In-Game Settings Map
+# 7. Comprehensive Settings Map (Covers MWII, MWIII, BO6, BO7 & Warzone)
 # -------------------------------------------------------------------
-$settings = @{
-    'RendererWorkerCount'    = "`"$optimalWorkers`""
-    'VideoMemoryScale'       = "`"$targetVramScale`""
-    'WorldMotionBlur'        = '"false"'
-    'WeaponMotionBlur'       = '"false"'
-    'DepthOfField'           = '"false"'
-    'FilmGrain'              = '"0.000000"'
-    'CorpsesMaxCount'        = '"0"'
-    'Blood'                  = '"false"'
-    'SubsurfaceScattering'   = '"false"'
-    'Tessellation'           = '"Off"'
-    'AmbientOcclusion'       = '"Off"'
-    'ScreenSpaceReflections' = '"Off"'
-    'WaterCaustics'          = '"false"'
-    'ClutterMaxDistance'     = '"Lowest"'
-    'SunShadowCascade'       = '"Low"'
-    'SpotShadowQuality'      = '"Low"'
-    'VolumetricQuality'      = '"Low"'
-    'ParticleLightingQuality'= '"Low"'
-    'DynamicResolution'      = '"false"'
+$settings = [ordered]@{
+    'RendererWorkerCount'        = "$optimalWorkers"
+    'VideoMemoryScale'           = ("{0:F6}" -f $targetVramScale)
+    'WorldMotionBlur'            = "false"
+    'WeaponMotionBlur'           = "false"
+    'EnableVelocityBasedBlur'    = "false"
+    'DepthOfField'               = "false"
+    'FilmGrain'                  = "0.000000"
+    'CorpseLimit'                = "0"
+    'CorpsesMaxCount'            = "0"
+    'ShowBlood'                  = "false"
+    'Blood'                      = "false"
+    'ShowBrass'                  = "false"
+    'SubsurfaceScattering'       = "false"
+    'Tessellation'               = "Off"
+    'AmbientOcclusion'           = "Off"
+    'AmbientLightingQuality'     = "Off"
+    'ScreenSpaceReflections'     = "Off"
+    'SSRQuality'                 = "Off"
+    'ScreenSpaceShadowQuality'   = "Off"
+    'WaterCaustics'              = "false"
+    'WaterCausticsMode'          = "Off"
+    'WaterWaveWetness'           = "false"
+    'WeatherGridVolumesQuality'  = "Off"
+    'ClutterMaxDistance'         = "Lowest"
+    'SunShadowCascade'           = "Low"
+    'SpotShadowQuality'          = "Low"
+    'ShadowQuality'              = "Very_Low"
+    'VolumetricQuality'          = "Low"
+    'ParticleQuality'            = "very low"
+    'ParticleLightingQuality'    = "Low"
+    'DynamicResolution'          = "false"
 }
 
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
@@ -238,7 +246,7 @@ foreach ($p in $searchPaths) {
     }
 
     foreach ($file in $files) {
-        # Per-directory timestamped backup
+        # Per-directory backup
         $backupDir = Join-Path $file.DirectoryName "_backup_$timestamp"
         if (-not (Test-Path $backupDir)) {
             New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
@@ -251,17 +259,35 @@ foreach ($p in $searchPaths) {
         $modified = $false
 
         foreach ($k in $settings.Keys) {
-            $v = $settings[$k]
-            # Match CST Syntax: Key:0.0 = "Value"
+            $rawVal = $settings[$k]
+
+            # 1. Match BO6 / BO7 / Modern Text Syntax: Key@0;12345;67890 = CurrentVal // Comments
+            $patternBo = "(?m)^(\s*)$([regex]::Escape($k))(@[0-9;]+\s*=\s*)([^
+/]*)(.*)$"
+            if ($content -match $patternBo) {
+                $boVal = $rawVal.Trim('"')
+                if ($k -eq 'Tessellation') { $boVal = '0_Off' }
+                if ($k -eq 'VolumetricQuality') { $boVal = 'QUALITY_LOW' }
+                $content = [regex]::Replace($content, $patternBo, "`$1$k`$2$boVal `$4")
+                $modified = $true
+                continue
+            }
+
+            # 2. Match CST Standard Syntax: Key:0.0 = "Value"
             $patternCst = "(?m)^(\s*//?\s*|\s*)$([regex]::Escape($k))(:[0-9.]+\s*=\s*).*$"
             if ($content -match $patternCst) {
-                $content = [regex]::Replace($content, $patternCst, "$k`$2$v")
+                $cstVal = "`"$($rawVal.Trim('"'))`""
+                $content = [regex]::Replace($content, $patternCst, "$k`$2$cstVal")
                 $modified = $true
+                continue
             }
-            # Match INI / TXT Syntax: Key = Value
-            $patternGen = "(?m)^(\s*)$([regex]::Escape($k))(\s*[:=]\s*).*$"
+
+            # 3. Match Standard INI / TXT Syntax: Key = Value
+            $patternGen = "(?m)^(\s*)$([regex]::Escape($k))(\s*[:=]\s*)([^
+/]*)(.*)$"
             if (-not $modified -and ($content -match $patternGen)) {
-                $content = [regex]::Replace($content, $patternGen, "$k = $v")
+                $genVal = $rawVal.Trim('"')
+                $content = [regex]::Replace($content, $patternGen, "`$1$k`$2$genVal `$4")
                 $modified = $true
             }
         }
@@ -274,7 +300,7 @@ foreach ($p in $searchPaths) {
             Write-Host "  [VERIFIED]  $($file.FullName)" -ForegroundColor Gray
         }
 
-        # Read-Only Lock
+        # Apply Read-Only protection
         Set-ItemProperty -Path $file.FullName -Name IsReadOnly -Value $true
         Write-Host "  [LOCKED]    $($file.Name) (Read-Only)" -ForegroundColor DarkGreen
     }
@@ -283,9 +309,9 @@ foreach ($p in $searchPaths) {
 Write-Host "`n=================================================================" -ForegroundColor Magenta
 Write-Host "  SUCCESS! Call of Duty is optimized and protected.              " -ForegroundColor Green
 Write-Host "=================================================================" -ForegroundColor Magenta
-Write-Host "• Files Optimized     : $modifiedCount" -ForegroundColor White
+Write-Host "• Files Processed     : $modifiedCount optimized & all locked" -ForegroundColor White
 Write-Host "• RendererWorkerCount : $optimalWorkers" -ForegroundColor White
 Write-Host "• VideoMemoryScale    : $targetVramScale" -ForegroundColor White
-Write-Host "• Visual Clarity      : Blur, Grain, DOF & Shadows Stripped" -ForegroundColor White
-Write-Host "• Config Protection   : Read-Only Applied across all configs" -ForegroundColor White
+Write-Host "• Dual-Slot Sync      : Active (.txt0 and .txt1 locked together)" -ForegroundColor White
+Write-Host "• Config Protection   : Read-Only Applied across all titles" -ForegroundColor White
 Write-Host "• Safety Revert       : Run with -Restore to undo changes at any time`n" -ForegroundColor DarkCyan
